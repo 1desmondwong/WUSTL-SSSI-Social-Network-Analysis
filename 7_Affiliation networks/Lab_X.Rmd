@@ -1,0 +1,384 @@
+---
+title: "Lab 6 - Affiliation Networks"
+author: "Douglas Luke"
+date: "July 16, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Introduction
+
+This lab provides an overview of affiliation networks in R. It follows Chapter 9 in the Springer
+book very closely. The code relies primarily on `igraph` functionality.
+
+```{r, message=FALSE}
+library(UserNetR)
+library(igraph)
+library(xtable)
+```
+
+### Affiliations as 2-mode networks
+
+Affiliation networks often arrive as an N by K *incidence matrix*. For
+example, the following dataframe stores data on students (S) who
+attend classes (C).
+
+```{r}
+C1 <- c(1,1,1,0,0,0)
+C2 <- c(0,1,1,1,0,0)
+C3 <- c(0,0,1,1,1,0)
+C4 <- c(0,0,0,0,1,1)
+aff.df <- data.frame(C1,C2,C3,C4)
+row.names(aff.df) <- c("S1","S2","S3","S4","S5","S6")
+aff.df
+```
+
+### Creating affiliation networks from incidence matrices
+
+Igraph can turn an incidence matrix into a 2-mode affiliation network with one line of code.
+
+```{r}
+bn <- graph.incidence(aff.df)
+```
+
+This is what it looks like:
+
+```{r}
+## Plot setup
+plt.x <- c(rep(2,6),rep(4,4))
+plt.y <- c(7:2,6:3)
+lay <- as.matrix(cbind(plt.x,plt.y))
+
+## Affiliation plot example
+shapes <- c("circle","square")
+colors <- c("blue","red")
+plot(bn,vertex.color=colors[V(bn)$type+1],
+     vertex.shape=shapes[V(bn)$type+1],
+     vertex.size=10,vertex.label.degree=-pi/2,
+     vertex.label.dist=1.2,vertex.label.cex=0.9,
+     layout=lay)
+```
+
+
+## Affiliation Network Basics
+
+As shown above, an affiliation network is a bipartite graph,
+where there are two types of nodes and there are ties only between
+the two types.
+
+The *B* and vertex attribute  called *type* are the two clues
+that igraph provides that tell you this is a bipartite graph. The *type*
+attribute is what igraph uses to distinguish the two types of nodes.
+
+```{r}
+bn
+V(bn)$type
+V(bn)$name
+```
+
+Notice the correspondence between the node labels and the vertex type in the above
+output. We can also see the underlying incidence matrix in the 2-mode network using
+the `get.incidence()` function.
+
+```{r}
+get.incidence(bn)
+
+```
+
+### Creating affiliation networks from edge lists
+
+It is also possible to create affiliation networks from edge lists. This will 
+often be the case for large affiliation networks.
+
+The following example recreates the above network, but starting from edgelist data.
+
+Start by creating a dataframe.
+
+```{r}
+## Affiliation edgelist
+el.df <- data.frame(rbind(c("S1","C1"),
+             c("S2","C1"),
+             c("S2","C2"),
+             c("S3","C1"),
+             c("S3","C2"),
+             c("S3","C3"),
+             c("S4","C2"),
+             c("S4","C3"),
+             c("S5","C3"),
+             c("S5","C4"),
+             c("S6","C4")))
+el.df
+```
+
+Then, the following two steps are necessary to create 
+the igraph affiliation network. The first step
+creates a basic network, the second step
+creates the `type` attribute so that igraph
+knows it's a bipartite (affiliation) graph.
+
+```{r}
+bn2 <- graph.data.frame(el.df,directed=FALSE)
+bn2
+V(bn2)$type <- V(bn2)$name %in% el.df[,1]
+bn2
+```
+
+E: The last piece of code is a little tricky. Can you figure
+out what is going on?
+
+Q: How can you tell if `bn` and `bn2` are, in fact, the same networks? 
+
+### Plotting 2-mode networks
+
+Typically, use shape (and maybe color) to
+distinguish the two node types.
+
+```{r}
+## Simple affiliation plot
+shapes <- c("circle","square")
+colors <- c("blue","red")
+plot(bn,vertex.color=colors[V(bn)$type+1],
+     vertex.shape=shapes[V(bn)$type+1],
+     vertex.size=10,vertex.label.degree=-pi/2,
+     vertex.label.dist=1.2,vertex.label.cex=0.9)
+```
+
+### Projections (Creating 1-mode networks from 2-mode networks)
+
+Typically will want to look at one or both of the 1-mode
+networks that can be derived from the 2-mode network (e.g., the class network or
+the student network).
+
+Simple to create the projections, but then make sure you know which one is which.
+
+```{r}
+bn.pr <- bipartite.projection(bn)
+bn.pr
+
+```
+
+```{r}
+## Bipartite projections 2
+graph.density(bn.pr$proj1)
+bn.student <- bn.pr$proj1
+bn.class <- bn.pr$proj2
+graph.density(bn.student)
+```
+
+Once you have the projections, then you can explore, analyze, and model
+each network to you heart's content!
+
+Look at the underlying data:
+
+```{r}
+get.adjacency(bn.student,sparse=FALSE,attr="weight")
+get.adjacency(bn.class,sparse=FALSE,attr="weight")
+
+```
+
+Plot them.
+
+```{r}
+## One-mode projection plots
+shapes <- c("circle","square")
+colors <- c("blue","red")
+op <- par(mfrow=c(1,2))
+plot(bn.student,vertex.color="blue",
+     vertex.shape="circle",main="Students",
+     edge.width=E(bn.student)$weight*2,
+     vertex.size=15,vertex.label.degree=-pi/2,
+     vertex.label.dist=1.2,vertex.label.cex=1)
+plot(bn.class,vertex.color="red",
+     vertex.shape="square",main="Classes",
+     edge.width=E(bn.student)$weight*2,
+     vertex.size=15,vertex.label.degree=-pi/2,
+     vertex.label.dist=1.2,vertex.label.cex=1)
+par(op)
+
+```
+
+## Extended Example: Hollywood Actors as an Affiliation Network
+
+The following sections do not have a lot of commentary, see the Springer book
+for more explanation.
+
+### 2-mode (actor, movie) affiliation network
+
+Make sure you understand the affiliation network structure of the data.
+
+```{r}
+## Hollywood setup
+data(hwd)
+h1 <- hwd
+h1
+V(h1)$name[1:10]
+V(h1)$type[1:10]
+V(h1)$IMDBrating[1:10]
+V(h1)$name[155:165]
+```
+
+Plotting a small subsection of the network.
+
+```{r}
+## Hollywood affiliation setup
+V(h1)$shape <- ifelse(V(h1)$type==TRUE,
+                      "square","circle")
+V(h1)$color <- ifelse(V(h1)$type==TRUE,
+                      "red","lightblue")
+
+## Hollywood plot 
+h2 <- subgraph.edges(h1, E(h1)[inc(V(h1)[name %in% 
+  c("The Wolf of Wall Street","Gangs of New York","The Departed")])])
+plot(h2,layout=layout_with_kk)
+
+```
+
+Some exploration of the entire two-mode network.
+
+```{r}
+## Graph density
+graph.density(h1)
+
+## Hollywood descriptives
+table(degree(h1,v=V(h1)[type==FALSE]))
+mean(degree(h1,v=V(h1)[type==FALSE]))
+
+
+
+```
+
+Busy actors.
+
+```{r}
+## Hollywood descriptives 2
+V(h1)$deg <- degree(h1)
+V(h1)[type==FALSE & deg > 4]$name
+busy_actor <- data.frame(cbind(
+  Actor = V(h1)[type==FALSE & deg > 4]$name,
+  Movies = V(h1)[type==FALSE & deg > 4]$deg
+))
+busy_actor[order(busy_actor$Movies,decreasing=TRUE),]
+
+```
+
+Some R code to examine popularity.
+
+```{r}
+## Hollywood descriptives 3
+for (i in 161:1365) {
+  V(h1)[i]$totrating <- sum(V(h1)[nei(i)]$IMDBrating)    
+   }
+
+## Hollywood descriptives 4
+max(V(h1)$totrating,na.rm=TRUE)
+pop_actor <- data.frame(cbind(
+  Actor = V(h1)[type==FALSE & totrating > 40]$name,
+  Popularity = V(h1)[type==FALSE & 
+                       totrating > 40]$totrating))
+pop_actor[order(pop_actor$Popularity,decreasing=TRUE),]
+
+
+```
+
+Are popular actors more active (or vice versa)?
+
+```{r}
+## Hollywood descriptives 5
+for (i in 161:1365) {
+  V(h1)[i]$avgrating <- mean(V(h1)[nei(i)]$IMDBrating)    
+   }
+num <- V(h1)[type==FALSE]$deg
+avgpop <- V(h1)[type==FALSE]$avgrating
+summary(lm(avgpop ~ num))
+## Hollywood popularity
+scatter.smooth(num,avgpop,col="lightblue",
+               ylim=c(2,10),span=.8,
+               xlab="Number of Movies",
+               ylab="Avg. Popularity")
+
+```
+
+### 1-mode neworks
+
+More information can be gleaned from the 1-mode projections of the 
+Hollywood affiliation network.
+
+This produces the actor and movie 1-mode networks.
+
+```{r}
+## Hollywood projections
+h1.pr <- bipartite.projection(h1)
+h1.act <- h1.pr$proj1
+h1.mov <- h1.pr$proj2
+h1.act
+h1.mov
+
+```
+
+Some characteristics of the movie network.
+
+```{r}
+## Movie affiliation network
+op <- par(mar = rep(0, 4))
+plot(h1.mov,vertex.color="red",
+     vertex.shape="circle",
+     vertex.size=(V(h1.mov)$IMDBrating)-3,
+     vertex.label=NA)
+par(op)
+```
+
+Descriptive statistics.
+
+```{r}
+## Movie descriptives
+graph.density(h1.mov)
+no.clusters(h1.mov)
+clusters(h1.mov)$csize
+table(E(h1.mov)$weight)
+```
+
+Look at the large connected component of the movie network.
+
+```{r}
+## Movie component
+h2.mov <- induced.subgraph(h1.mov,
+          vids=clusters(h1.mov)$membership==1)
+
+## Plot movie component
+plot(h2.mov,vertex.color="red",
+     edge.width=sqrt(E(h1.mov)$weight),
+     vertex.shape="circle",
+     vertex.size=(V(h2.mov)$IMDBrating)-3,
+     vertex.label=NA)
+
+```
+
+Examine the cohesive subgroups based on the k-cores. The figure only
+includes movies that have coreness greater than 4.
+
+```{r}
+## Hollyword cores distribution
+table(graph.coreness(h2.mov))
+
+## Plot Hollywood cores
+h3.mov <- induced.subgraph(h2.mov,
+                  vids=graph.coreness(h2.mov)>4)
+h3.mov
+plot(h3.mov,vertex.color="red",
+     vertex.shape="circle",
+    edge.width=sqrt(E(h1.mov)$weight),
+    vertex.label.cex=0.7,vertex.label.color="darkgreen",
+    vertex.label.dist=0.3,
+     vertex.size=(V(h3.mov)$IMDBrating)-3)
+```
+
+
+
+E: Conduct some similar exploration of the actor 1-mode network.
+

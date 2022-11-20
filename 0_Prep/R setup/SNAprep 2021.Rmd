@@ -1,0 +1,123 @@
+---
+title: "Preparing Your Computer for SNA"
+author: "Douglas Luke"
+date: "7/9/2021"
+output: pdf_document
+urlcolor: blue
+---
+
+# Introduction
+
+There are only a few things that need to be done to set
+up a computer for the Social Network Analysis workshop. 
+Assuming you have a reasonably new computer 
+with a fairly modern operating system, these steps should take you 
+less than 15 minutes. Specifically, you should do four things
+to prepare your computer:
+
+1. Download and install R
+2. Download and install RStudio
+3. Within RStudio, install two network analysis packages
+4. Within RStudio, install the UserNetR dataset package
+
+You may already have R and RStudio installed on your computer as
+part of a previous class or work that you do. In that case, you
+can skip the first two steps, but make sure you have the most
+recent versions of both R and RStudio installed.
+
+# Installing needed software
+
+## Step 1: Download & install R
+
+For Windows machines:
+- Go to https://cran.r-project.org/bin/windows/base/
+- Click **Download R 4.1.0 for Windows** (current version as of 7.8.21) 
+- Open the .exe file and follow recommended install instructions and settings
+
+For Mac OS:
+- Go to https://cran.r-project.org/bin/macosx/ 
+- Click **R-4.1.0.pkg** (current version as of 7.8.21)
+- Install following recommended install instructions and settings
+
+* Run \emph{R} to make sure that it is installed properly.
+* You can type in the following commands just to make sure that it is working correctly.
+
+
+```{r}
+dum <- 1:10
+dum2 <- dum^2
+dum
+dum2
+```
+
+
+## Step 2: Download & install RStudio
+
+For all:
+- Go to https://www.rstudio.com/products/rstudio/download/#download 
+- Click on the installer **RStudio 1.4.1106** (current version as of 4.8.21) appropriate for your OS
+- Follow recommended install instructions and settings
+
+
+# Installing required network packages
+
+## Step 3: Installing `statnet` and `igraph`
+
+The basic functionality of R can be extended by using various packages. These
+are created by other statisticians and scientists, and are free to install and use.
+For this class we will be using two different network analysis packages: *statnet* and
+*igraph*. For the following code (and all coding we will do in this class), this
+will be run within the RStudio IDE. If you are new to R/RStudio, just type
+each code line into the RStudio console window.
+
+The following code will install the two network packages.
+
+```{r eval=FALSE}
+install.packages("statnet")
+install.packages("igraph")
+```
+
+## Step 4: Installing the *UserNetR* package 
+
+I have created and collected a number of example datasets that accompany 
+my Springer book, and these will be
+used in this class. They are available as an R package, which can
+be downloaded and installed within R itself.
+
+* Start RStudio, and make sure it is working properly.
+* Install the *devtools* package by typing in the following line of code in the console
+ (by default, the window in the lower left-hand corner):
+ 
+```{r eval=FALSE}
+install.packages("devtools")
+```
+
+* Assuming this worked with no errors, then type in the following code to 
+install the *UserNetR* package from GitHub:
+
+```{r eval=FALSE}
+library(devtools)
+install_github("DougLuke/UserNetR")
+```
+
+# Testing everything
+
+The following code should then work to access one of the datasets, present some
+basic information about the network, and plot the network. The network plot itself may look a bit different when you plot.
+
+```{r,message=FALSE,warning=FALSE}
+library(statnet)
+library(UserNetR)
+data(Moreno)
+summary(Moreno,print.adj=FALSE)
+plot(Moreno, vertex.col = "gender")
+```
+
+
+
+
+
+
+
+
+

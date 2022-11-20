@@ -1,0 +1,371 @@
+---
+title: "Lab 6b - Statistical Network Models"
+author: "Douglas Luke"
+date: "Julyl 16, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Introduction
+
+This lab corresponds to Chapter 11 - Statistical Network Models.
+
+The statistical models covered in this chapter and lab are ERGMs: exponential
+random graph models. In R these models are available in the `ergm` package which
+is included as part of `statnet`. Note that you should install the `latticeExtra`
+package if you want to create the MCMC diagnostics plots for the ERGM models.
+
+```{r, message=FALSE}
+library(statnet)
+library(UserNetR)
+library(latticeExtra)
+```
+
+
+
+## Background
+
+Review the material presented at the beginning of Chapter 11, particularly the description of
+the basic ERGM model and the variety of terms that can be included in the model.
+
+The examples in this chapter make use of network data contained in the `TCnetworks` data object.
+Unlike most of the other datasets contained in `UserNetR`, this object is not an `igraph` or `statnet`
+network object. Instead, it is a list that contains four different network objects.
+
+The following code loads the list object, extracts the list members into the four network objects.
+
+```{r}
+data(TCnetworks)
+class(TCnetworks)
+TCcnt <- TCnetworks$TCcnt
+TCcoll <- TCnetworks$TCcoll
+TCdiss <- TCnetworks$TCdiss
+TCdist <- TCnetworks$TCdist
+summary(TCdiss,print.adj=FALSE)
+summary(TCcnt,print.adj=FALSE)
+```
+
+As the book and data help file reveal, these network data come from an evaluation of the Indiana
+tobacco control program. The first three network objects contain organizational contact, collaboration,
+and dissemination tie information. The last network object (TCdist), is a little different, and is
+used to contain the geographic distances between all 25 of the program members.
+
+E: Using basic R and `statnet` tools, how can you tell that `TCdist` is different from the other networks?
+
+```{r}
+components(TCdiss)
+gden(TCdiss)
+centralization(TCdiss,betweenness,mode='graph')
+```
+
+```{r}
+deg <- degree(TCdiss,gmode='graph')
+lvl <- TCdiss %v% 'agency_lvl'
+plot(TCdiss,usearrows=FALSE,displaylabels=TRUE,
+      vertex.cex=log(deg),
+      vertex.col=lvl+1,
+      label.pos=3,label.cex=.7,
+      edge.lwd=0.5,edge.col="grey75")
+legend("bottomleft",legend=c("Local","State",
+                             "National"),
+       col=2:4,pch=19,pt.cex=1.5)
+
+```
+
+## Building ERGM models
+
+As in any type of statistical modeling, it is often useful to start with a baseline, null
+model. For `ergm` models, this means no covariates, but the model is conditioned on the
+observed number of ties.
+
+```{r}
+library(ergm)
+DSmod0 <- ergm(TCdiss ~ edges,
+               control=control.ergm(seed=40))
+class(DSmod0)
+summary(DSmod0)
+```
+
+The model is estimating the log-odds of observing a tie. So, we can take the logistic
+transform of the edges estimated parameter to be able to interpret its meaning. In this case
+it means the overall probability of observing a tie in the network, which is equivalent to
+its density.
+
+```{r}
+plogis(coef(DSmod0))
+gden(TCdiss)
+```
+
+E: Build null ergm models for the contact and collaboration ties as well. Do they have the same
+parameter estimates as for the dissemination ties? Does that make sense to you?
+
+### Node-attribute terms
+
+More informative ERGM models are built up by including other covariates of interest. Types of covariates
+in `ergm` are called 'terms.' Terms can be node characteristics, node interactions, relational 
+characteristics, and higher order network effects (e.g., degree distributions, triangles, etc.) See
+the Harris book and Morris (Morris 2008) for more details. Also, to see the internal
+help for ergm terms, type `?ergm.terms`.
+
+The following plot suggests that agencies with more experience in tobacco control may be more
+likely to be involved in dissemination ties with other agencies.
+
+```{r}
+scatter.smooth(TCdiss %v% 'tob_yrs',
+               degree(TCdiss,gmode='graph'),
+               xlab='Years of Tobacco Experience',
+               ylab='Degree')
+
+```
+
+The following model examines the effects of agency experience, and whether the agency is the 
+lead agency, on the likelihood of observing a dissemination tie. This model uses the 
+nodefactor term (for a binary node covariate) and the nodecov term (for a quantitative node
+covariate).
+
+```{r}
+DSmod1 <- ergm(TCdiss ~ edges +
+              nodefactor('lead_agency') +
+              nodecov('tob_yrs'))
+summary(DSmod1)
+
+```
+
+The coefficients of the fitted model can be extracted from the model object. These can be used
+to calculate the estimated probability of observing ties for particulary network (dyad) configurations.
+
+So, for example, the above output suggests that agencies with more years of experience
+in tobacco control will have increased likelihood of being involved in a dissemination tie.
+
+The following code determines the probability of observing a tie between two non-lead
+agencies, each with 5 years of TC experience.
+
+```{r}
+coef(DSmod1)
+p_edg <- coef(DSmod1)[1]
+p_yrs <- coef(DSmod1)[3]
+plogis(p_edg + 5*p_yrs + 5*p_yrs)
+```
+
+Q: If you take the logistic transform of just the edges parameter in this model, what number do you get, and
+how do you interpret it?
+
+### Dyadic terms
+
+One of the powerful features of statistical network models is to explore dyadic effects. That is, how
+do characteristics of pairs of actors influence the likelihood that those pairs are connected by a tie?
+This allows us to explore and test hypotheses about dyadic similarity (homophily) and dissimilarity
+(heterophily).
+
+Before building a model with dyadic terms, it is usually helpful to explore the raw observed tie
+patterns with respect to some node categorical attribute. (See the help file for classifiction
+codes: ?TCnetworks.)
+
+```{r}
+mixingmatrix(TCdiss,'agency_lvl')
+mixingmatrix(TCdiss,'agency_cat')
+```
+
+Here are three different ways to examine the homophily effects of agency level on dissemination.
+
+```{r}
+DSmod2a <- ergm(TCdiss ~ edges +
+              nodecov('tob_yrs') +
+              nodematch('agency_lvl'),
+              control=control.ergm(seed=40))
+summary(DSmod2a)
+```
+
+```{r}
+DSmod2b <- ergm(TCdiss ~ edges +
+              nodecov('tob_yrs') +
+              nodematch('agency_lvl',diff=TRUE),
+              control=control.ergm(seed=40))
+summary(DSmod2b)
+
+```
+
+```{r}
+DSmod2c <- ergm(TCdiss ~ edges +
+              nodecov('tob_yrs') +
+              nodemix('agency_lvl',base=1),
+              control=control.ergm(seed=40))
+summary(DSmod2c)
+```
+
+Q: Of the three estimated models, which do you prefer? How does AIC help you in model selection?
+
+Q: Using the differential homophily model, what is the probability of two agencies having a dissemination
+tie, when both agencies have five years of tobacco experience, and both are local agencies?
+
+### Relational predictors
+
+Although not clearly described in the papers and documentation for `ergm`, these models can
+use other network ties as a relational predictor (covariate). So, for example, you could build
+a model that test the hypothese that friends in a high school class (friendship tie) are more
+likely to lend money to each other (money flow tie), compared to non-friends.
+
+Here, we build a model that looks at whether contact ties and the distance between
+agencies are significantly related
+to the probability of observing a dissemination tie. The term we use is 'edgecov'. 
+
+```{r}
+as.sociomatrix(TCdist,attrname = 'distance')[1:5,1:5]
+as.sociomatrix(TCcnt,attrname = 'contact')[1:5,1:5]
+DSmod3 <- ergm(TCdiss ~ edges +
+              nodecov('tob_yrs') +
+              nodematch('agency_lvl',diff=TRUE) +
+              edgecov(TCdist,attr='distance') +
+              edgecov(TCcnt,attr='contact'), 
+              control=control.ergm(seed=40))
+summary(DSmod3)
+
+```
+
+### Local structural terms (dyad dependency)
+
+Local structural predictors can be important elements of a network statistical model, for both
+substantive reasons, and to improve model stability. (See Harris book and assigned readings
+for more details.)
+
+These types of models are more complicated: they require different estimation techniques (Markov Chain
+Monte Carlo, MCMC, for example), they can be less stable, and even with modern computers these models
+can take a long time to estimate.
+
+```{r}
+DSmod4 <- ergm(TCdiss ~ edges + 
+              nodecov('tob_yrs') +
+              nodematch('agency_lvl',diff=TRUE) +
+              edgecov(TCdist,attr='distance') +
+              edgecov(TCcnt,attr="contact") +
+              gwesp(0.7, fixed=TRUE), 
+              control=control.ergm(seed=40))
+summary(DSmod4)
+
+```
+
+## Examining fitted ERGM models
+### Examine predicted model profiles
+
+Want to look at estimated probabilities for different model configurations (i.e., covariate patterns) to
+make sure you understand the effects and how they are interrelated. See my book for what
+these probabilities refer to.
+
+```{r}
+prd_prob1 <- plogis(-6.34 + 2*1*.098 + 1.51 + 
+                      4*1.042 + .858*(.50^4))
+prd_prob1
+prd_prob2 <- plogis(-6.34 + 2*5*.098 + 
+                      1*1.04 + .858*(.50^4))
+prd_prob2
+
+```
+
+### Transform raw parameter estimates into odds-ratios
+
+Because an ERGM model is a type of logistic model (probability of an observed tie), the raw
+parameter estimates are appropriately interpreted as log-odds. These can be transformed
+into odds-ratios by exponentiating the parameters. See Harris, pp. 50-52 for more details.
+
+This code shows how to extract the appropriate coefficient (and standard error) from the model object, and then use
+it to calculate the odds ratio and confidence interval for the `tob_yrs` parameter. Note that sometimes
+this is easier to do by hand, rather than remembering the code for extraction.
+
+```{r}
+coef(DSmod4)
+CF_tobyrs <- coef(DSmod4)[[2]]
+CF_tobyrs
+summary(DSmod4)$asyse
+SE_tobyrs <- summary(DSmod4)$asyse[[2]]
+SE_tobyrs
+```
+Now that we have the appropriate values, the calculations for the OR and CI are straightforward.
+
+```{r}
+OR_tobyrs <- exp(CF_tobyrs)
+OR_tobyrs
+LCI <- exp(CF_tobyrs - 1.96*SE_tobyrs)
+UCI <- exp(CF_tobyrs + 1.96*SE_tobyrs)
+LCI
+UCI
+```
+
+E: Interpret the odds-ratio and its confidence interval. Calculate the OR and CI for the first agency level homophily term. How do
+you interpret those values?
+
+Q: The double bracket notation can be somewhat confusing for extracting components of lists in R. What happens when you use only a single 
+set of brackets?
+
+### Examine model fit
+It is always important to assess the convergence and fit of the model. Convergence problems will
+be indicated by error or warning messages, or models that produce networks that do not look like
+the observed network (density of 1 or 0, for example). Model fit tells us more about how the
+modeled network is similar to the observed network.
+
+To examine model fit, `ergm` allows us to create a model fit object.
+
+```{r}
+DSmod.fit <- gof(DSmod4, 
+                 GOF = ~distance + espartners + 
+                   degree + triadcensus,
+  	             burnin=1e+5, interval = 1e+5)
+summary(DSmod.fit)
+
+```
+
+In addition to looking at the summary, very useful gof plots can be produced:
+
+```{r}
+op <- par(mfrow=c(2,2))
+plot(DSmod.fit,cex.axis=1.6,cex.label=1.6)
+par(op)
+
+```
+
+More sophisticated model diagnostics can also be produced, allowing you to look 'under the hood' at
+the estimation process. This can be useful to diagnose model problems.
+
+```{r}
+mcmc.diagnostics(DSmod4)
+```
+
+### Examine simulated networks based on fitted models
+
+Finally, once you have a model that you think is valid and interesting, you can produce
+simulated networks based on the model for further exploration.
+
+```{r}
+sim4 <- simulate(DSmod4, nsim=1, seed=569)
+summary(sim4,print.adj=FALSE)
+```
+
+The following code plots both the observed network and a simulated network based on DSmod4, to
+see how they compare. (Note that I found a mistake in the code in the book, and corrected
+it here.)
+
+```{r}
+op <- par(mfrow=c(1,2),mar=c(0,0,2,0))
+lvlobs <- TCdiss %v% 'agency_lvl'
+plot(TCdiss,usearrows=FALSE,
+      vertex.col=lvlobs+1,
+      edge.lwd=0.5,edge.col="grey75",
+     main="Observed TC network")
+lvl4 <- sim4 %v% 'agency_lvl'
+plot(sim4,usearrows=FALSE,
+      vertex.col=lvl4+1,
+      edge.lwd=0.5,edge.col="grey75",
+     main="Simulated network - Model 4")
+par(op)
+
+```
+
+E: To better understand how well DSmod4 is doing, you might want to simulate some networks from some of the other
+models. In particular, compare a simulated network from the null model (DSmod0) to both the observed network
+and our final model (DSmod4).
+

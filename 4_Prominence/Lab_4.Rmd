@@ -1,0 +1,271 @@
+---
+title: "Lab 4 - Prominence"
+author: "Douglas Luke"
+date: "July 14, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Introduction
+
+This lab corresponds to Chapter 7 - Actor Prominence.
+
+Typical setup to start.
+
+```{r, message=FALSE}
+library(statnet)
+library(UserNetR)
+library(RColorBrewer)
+options(digits=3)
+```
+
+## Centrality
+
+We are going to start by examining the centrality of individual tobacco control
+leaders working in various agencies in DHHS.
+
+First, just do a simple plot to see the basic structure of the network.
+
+```{r}
+data(DHHS)
+plot(DHHS, vertex.cex=2, edge.col="grey75",
+     displaylabels=TRUE, label.cex=.5)
+```
+
+E: Try playing around with the various plot options to improve (or not)
+the display of the DHHS network.
+
+It is often useful to examine more than one measure of centrality. 
+This can be particularly useful for larger
+networks.
+
+Although we have mostly used `statnet` for our network work up to now, here I am going to pop over
+to `igraph` to calculate PageRank centrality, which is not available in `statnet`. 
+
+One thing to watch out for is that R can get confused if you switch back and forth between `statnet` and 
+`igraph` in the same session. (One reason for this is that both packages have functions with the same
+name.) So, to be safe you want to fully unload (`detach`) one package before loading the other. The following
+code demonstrates this.
+
+Also, make sure to install the `intergraph` package, which allows us to transform `statnet` network objects
+to `igraph` and vice versa.
+
+```{r, message=FALSE}
+detach("package:statnet", unload=TRUE)
+library(igraph)
+library(intergraph)
+DHHS_i <- asIgraph(DHHS)
+```
+
+Once we have the DHHS network transformed into an `igraph` network object, we can perform any network
+analyses using igraph-specific functionality.
+
+```{r}
+summary(DHHS_i)
+PR <- page.rank(DHHS_i)
+PR
+```
+
+E: Look up the help entry for `summary.igraph()` to see an explanation of the information contained
+in the `igraph` network object summary.
+
+E: Look up the help entry for `page.rank()` to see what all the options are.
+
+Note that `PR` is actually a list, and we want to extract the vector in that list which contains 
+the actual PageRank values.
+
+```{r}
+PR <- PR$vector
+PR
+```
+
+
+Don't forget to move back to `statnet`.
+
+```{r, message=FALSE}
+detach("package:igraph", unload=TRUE)
+library(statnet)
+```
+
+
+```{r}
+data(DHHS)
+df.prom <- data.frame(
+  deg = degree(DHHS),
+  cls = closeness(DHHS),
+  btw = betweenness(DHHS),
+  evc = evcent(DHHS),
+  inf = infocent(DHHS),
+  flb = flowbet(DHHS),
+  pr = PR
+  )
+```
+
+```{r}
+df.prom
+cor(df.prom)
+```
+
+E: Plot some of these centrality values to see how similar they are to one another.
+
+E: Some centrality measures can be produced in a standardize form. Look at the help for
+`betweenness` to see if you can figure out how this is done. When and why might you use
+standardized measures of centrality rather than raw measures?
+
+## Centralization
+
+Remember that while centrality is a characteristics of individual network members, centralization is a property
+of the overall network. That is, a measure of the variability of the individual-level centrality characteristics.
+
+Two network extremes:
+
+```{r}
+dum1 <- rbind(c(1,2),c(1,3),c(1,4),c(1,5))
+star_net <- network(dum1,directed=FALSE)  
+dum2 <- rbind(c(1,2),c(2,3),c(3,4),c(4,5),c(5,1))
+circle_net <- network(dum2,directed=FALSE)  
+par(mar=c(4,4,.1,.1))
+my_pal <- brewer.pal(5,"Set2")
+gplot(star_net,usearrows=FALSE,displaylabels=FALSE,
+      vertex.cex=2,
+      vertex.col=my_pal[1],
+      edge.lwd=0,edge.col="grey50",xlab="Star Graph")
+gplot(circle_net,usearrows=FALSE,displaylabels=FALSE,
+      vertex.cex=2,
+      vertex.col=my_pal[3],
+      edge.lwd=0,edge.col="grey50",xlab="Circle Graph")
+
+```
+
+Measures of centralization allow us to compare the two extreme networks.
+
+```{r}
+closeness(circle_net)
+centralization(circle_net,closeness)
+closeness(star_net)
+centralization(star_net,closeness)
+
+```
+
+## Exploring centrality
+
+How do the Bali network members vary in their prominence?
+
+```{r}
+data(Bali)
+str(degree(Bali))
+summary(degree(Bali))
+```
+Might want to collect different centrality measures together for subsequent display or analysis.
+
+```{r}
+df.prom2 <- data.frame(
+  degree = degree(Bali),
+  closeness = closeness(Bali),
+  betweenness = betweenness(Bali)
+  )
+row.names(df.prom2) <- Bali %v% "vertex.names"
+df.promsort <- df.prom2[order(-df.prom2$degree),]
+df.promsort
+```
+
+Q: What pattern do you notice in the numbers for `degree`? Does this make sense to you? Explore the
+documentation for the `degree()` function to see what the default action is, and a way to change it.
+
+As we discovered last week, visual exploration is often very useful.
+
+```{r}
+my_pal <- brewer.pal(5,"Set2")
+deg <- degree(Bali,rescale=TRUE)
+rolecat <- Bali %v% "role"
+gplot(Bali,usearrows=FALSE,displaylabels=TRUE,
+      vertex.cex=deg*12,
+      vertex.col=my_pal[as.factor(rolecat)],
+      edge.lwd=0.5,edge.col="grey75")
+legend("topright",legend=c("BM","CT","OA","SB","TL"),
+       col=my_pal,pch=19,pt.cex=2)
+```
+
+## Cutpoints and Bridges
+### Cutpoints
+
+Here we will use the Simpsons network to demonstrate cutpoints and bridges, instead of the example network in the book.
+
+```{r}
+data(Simpsons)
+cpnet <- cutpoints(Simpsons,mode="graph",
+                   return.indicator=TRUE)
+gplot(Simpsons,gmode="graph",vertex.col=cpnet+2,
+      jitter=FALSE,displaylabels=TRUE)
+```
+
+Q: What kind of object is returned by the `cutpoints()` function?
+
+This is what happens after dropping Bart from the network (node #3).
+
+```{r}
+net2 <- Simpsons
+components(net2)
+delete.vertices(net2,3)
+components(net2)
+gplot(net2,gmode="graph",vertex.col=2,
+      jitter=FALSE,displaylabels=TRUE)
+```
+
+E: Using code similar to above, identify the cutpoints for the Bali network.
+
+### Bridges
+
+The is the `bridges()` function from the book.
+
+```{r}
+bridges <- function(dat,mode="graph",
+                    connected=c("strong", "weak")) {
+  e_cnt <- network.edgecount(dat)
+  if (mode == "graph") {
+    cmp_cnt <- components(dat)
+    b_vec <- rep(FALSE,e_cnt) 
+    for(i in 1:e_cnt){
+      dat2 <- dat
+      delete.edges(dat2,i)
+      b_vec[i] <- (components(dat2) != cmp_cnt)
+      }
+  }
+  else {
+    cmp_cnt <- components(dat,connected=connected)
+    b_vec <- rep(FALSE,e_cnt)
+    for(i in 1:e_cnt){
+      dat2 <- dat
+      delete.edges(dat2,i)
+      b_vec[i] <- (components(dat2,connected=connected) 
+        != cmp_cnt)
+    }
+  }
+return(b_vec)
+}
+```
+
+E: How much of the above function coding can you follow? What happens when the code is run? How can you view the code, once the function has been defined in R?
+
+Now we can use the new function.
+
+
+
+```{r}
+brnet <- bridges(Simpsons)
+brnet
+gplot(Simpsons,gmode="graph",vertex.col="red",
+      edge.col=brnet+2,
+      jitter=FALSE,displaylabels=TRUE)
+```
+
+E: Look at the DHHS network and explore the centrality of its members. Identify the most central members based on efficiency of communication. Identify
+the most central members based on control over communication. Finally, which agencies are most and least central in this network?
+
+

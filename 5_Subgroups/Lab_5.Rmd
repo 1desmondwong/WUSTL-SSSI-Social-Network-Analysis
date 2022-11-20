@@ -1,0 +1,394 @@
+---
+title: "Lab 5 - Subgroups"
+author: "Douglas Luke"
+date: "July 14, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Introduction
+
+This lab corresponds to Chapter 8 - Subgroups.
+
+This chapter and lab primarily uses the `igraph` package, which has a greater variety of useful
+subgroup detection functions.
+
+```{r, message=FALSE}
+library(igraph)
+library(UserNetR)
+library(intergraph)
+```
+
+## Social Cohesion
+### Cliques
+
+One way to define subgroups in a network is to look for regions of a network that are defined by
+frequent or strong ties internal to the group. In social networks we think of these regions or
+subgroups as *socially cohesive.*
+
+Cliques are the simplest and among the oldest of the formally defined subgroups based on social
+cohesion. A clique is a maximally complete subgroup, that is, a subgroup with all possible ties.
+
+The following code prints a simple network with two cliques. It also demonstrates a nice
+feature of `igraph` where you can quickly create a small network using a simple graph
+formula.
+
+```{r}
+clqexmp <- graph.formula(A:B:C:D--A:B:C:D,D-E,E-F-G-E)
+plot(clqexmp,vertex.color="SkyBlue2")
+```
+
+Some basic commands for getting information about cliques in an `igraph` network object.
+
+```{r}
+clique.number(clqexmp)
+cliques(clqexmp, min=3)
+maximal.cliques(clqexmp,min=3)
+largest.cliques(clqexmp)
+```
+
+E: Try creating a slightly larger or more complicated network and use the above commands to detect and list the 
+cliques in the network.
+
+I include the following code more as a preview of material we will cover when we cover network modeling.
+Here, we are creating random networks and looking for cliques in them. 
+
+```{r}
+g25 <- erdos.renyi.game(25, 75, type="gnm")
+g50 <- erdos.renyi.game(50, 150, type="gnm")
+g100 <- erdos.renyi.game(100, 300, type="gnm")
+g500 <- erdos.renyi.game(500, 1500, type="gnm")
+nodes <- c(25,50,100,500)
+lrgclq <- c(clique.number(g25),clique.number(g50),
+            clique.number(g100),clique.number(g500))
+numclq <- c(length(cliques(g25,min=3)),
+            length(cliques(g50,min=3)),
+            length(cliques(g100,min=3)),
+            length(cliques(g500,min=3)))
+clqinfo <- data.frame(Nodes=nodes,Largest=lrgclq,
+                      Number=numclq)
+clqinfo
+```
+
+Q: Can you understand what is being done in the following code, and what information is collected in the dataframe? Hint: look at the help file for `erdos.renyi.game()`.
+
+```{r}
+g1 <- erdos.renyi.game(200, .01, type="gnp")
+g2 <- erdos.renyi.game(200, .05, type="gnp")
+g3 <- erdos.renyi.game(200, .10, type="gnp")
+g4 <- erdos.renyi.game(200, .15, type="gnp")
+prob <- c("1%","5%","10%","15%")
+lrgclq <- c(clique.number(g1),clique.number(g2),
+            clique.number(g3),clique.number(g4))
+dens <- c(graph.density(g1),graph.density(g2),
+          graph.density(g3),graph.density(g4))
+numclq <- c(length(cliques(g1,min=3)),
+            length(cliques(g2,min=3)),
+            length(cliques(g3,min=3)),
+            length(cliques(g4,min=3)))
+clqinfo <- data.frame(Probability=prob,Density=dens,
+                      Largest=lrgclq,
+                      Number=numclq)
+clqinfo
+```
+
+### k-cores
+
+A more realistic and useful type of subgroup based on social cohesion is a k-core. A
+k-core is a maximal subgraph where every member of the subgraph has degree *k* or greater.
+
+The following code loads the DHHS network, and transforms it into an `igraph` network object.
+Also, we create a new network that only retains edges that have 'collab' greater than 2 (only looking
+at formal collaborations). Note the cleaner syntax for accessing edge attributes (same is true
+for node attributes).
+
+```{r}
+data(DHHS)
+library(intergraph)
+iDHHS <- asIgraph(DHHS)
+graph.density(iDHHS)
+iDHHS <- subgraph.edges(iDHHS,E(iDHHS)[collab > 2])
+graph.density(iDHHS)
+```
+
+Use `graph.coreness()` function to identify all the k-cores in a network.
+
+```{r}
+coreness <- graph.coreness(iDHHS)
+table(coreness)
+maxCoreness <- max(coreness)
+maxCoreness
+```
+
+Note how we use the special `name` and `color` node attributes. If they have information in them,
+`igraph` will use it for labeling and coloring nodes.
+
+Also, we have to copy over the name, because `vertex.names` is a node attribute for `statnet`.
+
+```{r}
+Vname <- get.vertex.attribute(iDHHS,name='vertex.names',
+                              index=V(iDHHS))
+V(iDHHS)$name <- Vname
+V(iDHHS)$color <- coreness + 1
+op <- par(mar = rep(0, 4))
+plot(iDHHS,vertex.label.cex=0.8)
+par(op)
+
+```
+
+When examining cores, it can be helpful to use the core value as a node attribute.
+
+Also, see how we use `rainbow()` to set colors.
+
+```{r}
+colors <- rainbow(maxCoreness)
+op <- par(mar = rep(0, 4))
+plot(iDHHS,vertex.label=coreness,
+     vertex.color=colors[coreness])
+par(op)
+
+```
+
+E: Rerun the above code, but after selecting ties that correspond to both informal and formal collaboration.
+
+E: Try some of the other color options, see ?rainbow.
+
+It can be very illuminating to 'peel away' the cores, to examine the highest-level cores. This works
+because of the nested structure of k-cores (all 3-cores are 2-cores as well, etc.).
+
+Notice that we are filtering the network here, as we covered in the data management chapter.
+
+```{r}
+V(iDHHS)$name <- coreness
+V(iDHHS)$color <- colors[coreness]
+iDHHS1_6 <- iDHHS
+iDHHS2_6 <- induced.subgraph(iDHHS,
+                             vids=which(coreness > 1))
+iDHHS3_6 <- induced.subgraph(iDHHS,
+                             vids=which(coreness > 2))
+iDHHS4_6 <- induced.subgraph(iDHHS,
+                             vids=which(coreness > 3))
+iDHHS5_6 <- induced.subgraph(iDHHS,
+                             vids=which(coreness > 4))
+iDHHS6_6 <- induced.subgraph(iDHHS,
+                             vids=which(coreness > 5))
+```
+
+The following plotting code demonstrates a useful 'power-tip.' By saving the layout initially,
+we can use the same layout coordinates across multiple network panels.(A little more complicated
+than it might first seem.)
+
+```{r}
+lay <- layout.fruchterman.reingold(iDHHS)
+op <- par(mfrow=c(3,2),mar = c(3,0,2,0))
+plot(iDHHS1_6,layout=lay,main="All k-cores")
+plot(iDHHS2_6,layout=lay[which(coreness > 1),],
+     main="k-cores 2-6")
+plot(iDHHS3_6,layout=lay[which(coreness > 2),],
+     main="k-cores 3-6")
+plot(iDHHS4_6,layout=lay[which(coreness > 3),],
+     main="k-cores 4-6")
+plot(iDHHS5_6,layout=lay[which(coreness > 4),],
+     main="k-cores 5-6")
+plot(iDHHS6_6,layout=lay[which(coreness > 5),],
+     main="k-cores 6-6")
+par(op)
+```
+
+Q: Will the highest-level cores in a network always be a single connected component?
+
+## Community Detection
+
+Modern subgroup techniques tend to focus on subgroups defined by both internal (lots) and
+external (few) ties.
+
+### Modularity
+
+A statistic that is useful for detecting and describing subgroups. Modularity is the extent to 
+which nodes exhibit clustering where there is greater
+density within the clusters and less density between them, with reference to some node
+classification.
+
+```{r}
+g1 <- graph.formula(A-B-C-A,D-E-F-D,G-H-I-G,A-D-G-A)
+V(g1)$grp_good <- c(1,1,1,2,2,2,3,3,3)
+V(g1)$grp_bad <- c(1,2,3,2,3,1,3,1,2)
+```
+
+```{r}
+op <- par(mfrow=c(1,2))
+plot(g1,vertex.color=(V(g1)$grp_good),
+     vertex.size=20,
+     main="Good Grouping")
+plot(g1,vertex.color=(V(g1)$grp_bad),
+     vertex.size=20,
+     main="Bad Grouping")
+par(op)
+```
+
+```{r}
+modularity(g1,V(g1)$grp_good)
+modularity(g1,V(g1)$grp_bad)
+
+```
+
+Digression that demonstrates how to write a simple function that drives an even simpler
+simulation.(Note that I have replaced the older, deprecated `erdos.renyi.game()` with the
+newer function name `sample_gnp()`.)
+
+```{r}
+ran_mod <- function(){
+  dum <- sample_gnp(100,.1)
+  V(dum)$class <- sample(c("A","B","C","D"),100,replace=TRUE)
+  mod <- modularity(dum,factor(V(dum)$class))
+  mod
+}
+```
+
+```{r}
+plot(density(replicate(100,ran_mod())))
+```
+
+
+
+
+Here is how to calculate modularity for a network with an existing cliassification variable.
+
+Have to transfrom the network again because of some earlier code.
+
+Also, note how we had to add a 1 to the `agency` code. This is because of a bug in the
+`modularity()` function--it crashes if one of the values is 0 (or missing).
+
+```{r}
+iDHHS <- asIgraph(DHHS)
+table(V(iDHHS)$agency)
+V(iDHHS)[1:10]$agency
+modularity(iDHHS,(V(iDHHS)$agency+1))
+
+```
+
+Some other examples from the datasets.
+
+```{r}
+data(Moreno)
+iMoreno <- asIgraph(Moreno)
+table(V(iMoreno)$gender)
+modularity(iMoreno,V(iMoreno)$gender)
+data(Facebook)
+levels(factor(V(Facebook)$group))
+grp_num <- as.numeric(factor(V(Facebook)$group))
+modularity(Facebook,grp_num)
+
+```
+
+E: Examine the plots of these networks, color coding the nodes by the classification variables. Does it
+make sense to you that the Moreno and Facebook networks have greater modularity than the DHHS network? 
+Continue to explore some of the other networks, and try to guess ahead of time which classification variables
+are likely to show higher or lower modularity scores. For example, what would expect to see for the
+FIFA_Nether network?
+
+### Community detection algorithms
+
+A number of good community detection algorithms are supported in `igraph`. The basic approach is
+to run one of these functions on a network, storing the results in a membership object. This
+object can then be used in a number of ways, including plotting.
+
+Notice here that the `modularity()` function can be run directly on a membership object.
+
+```{r}
+cw <- cluster_walktrap(iMoreno)
+membership(cw)
+modularity(cw)
+```
+
+Now, we can make a very pretty (and useful) figure!
+
+```{r}
+plot(cw, iMoreno)
+```
+
+E: Pick a different community detection algorithm in igraph, and use it on the iMoreno igraph
+network. How does it compare to the 'cluster_walktrap' algorithm?
+
+Comparing a cluster solution based on the 'walktrap' algorithm to the existing agency node
+characteristics.
+
+```{r}
+cw <- cluster_walktrap(iDHHS)
+modularity(cw)
+membership(cw)
+table(V(iDHHS)$agency,membership(cw))
+
+```
+
+Comparing multiple community detection algorithms to each other.
+
+```{r}
+data(Bali)
+iBali <- asIgraph(Bali)
+cw <- cluster_walktrap(iBali)
+modularity(cw)
+membership(cw)
+ceb <- cluster_edge_betweenness(iBali)
+modularity(ceb)
+membership(ceb)
+cs <- cluster_spinglass(iBali)
+modularity(cs)
+membership(cs)
+cfg <- cluster_fast_greedy(iBali)
+modularity(cfg)
+membership(cfg)
+clp <- cluster_label_prop(iBali)
+modularity(clp)
+membership(clp)
+cle <- cluster_leading_eigen(iBali)
+modularity(cle)
+membership(cle)
+cl <- cluster_louvain(iBali)
+modularity(cl)
+membership(cl)
+co <- cluster_optimal(iBali)
+modularity(co)
+membership(co)
+```
+
+Using a more formal classification comparison statistic to examine the similarities among
+multiple detection approaches.
+
+```{r}
+table(V(iBali)$role,membership(cw))
+compare(as.numeric(factor(V(iBali)$role)),cw,
+        method="adjusted.rand")
+compare(cw,ceb,method="adjusted.rand")
+compare(cw,cs,method="adjusted.rand")
+compare(cw,cfg,method="adjusted.rand")
+```
+
+E: How else can you use the `compare()` function?
+
+As usual, plotting can reveal a tremendous amount of important information.
+
+```{r}
+op <- par(mfrow=c(3,2),mar=c(3,0,2,0))
+plot(ceb, iBali,vertex.label=V(iBali)$role,
+     main="Edge Betweenness")
+plot(cfg, iBali,vertex.label=V(iBali)$role,
+     main="Fastgreedy")
+plot(clp, iBali,vertex.label=V(iBali)$role,
+     main="Label Propagation")
+plot(cle, iBali,vertex.label=V(iBali)$role,
+     main="Leading Eigenvector")
+plot(cs, iBali,vertex.label=V(iBali)$role,
+     main="Spinglass")
+plot(cw, iBali,vertex.label=V(iBali)$role,
+     main="Walktrap")
+par(op)
+
+```
+

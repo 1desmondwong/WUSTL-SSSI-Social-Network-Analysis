@@ -1,0 +1,259 @@
+---
+title: "Lab 6a - Network Models"
+author: "Douglas Luke"
+date: "July 16, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Introduction
+
+This lab corresponds to Chapter 10 - Models of Network Structure and Prominence.
+
+We will use `igraph` in this chapter, which has many more functions available to 
+create random networks based on mathematical or structural models. Also, some of
+the code relies on functions contained in the `tidyverse` suite of packages; namely,
+`purrr`.
+
+```{r, message=FALSE}
+library(igraph)
+library(UserNetR)
+library(purrr)
+library(lattice)
+```
+
+
+
+## Erdos-Renyi Random Graphs
+
+These are the simplest models, because they are purely random models. That is, ties between
+nodes are determined randomly.
+
+Note that the model functions in igraph have new names, to be more consistent across the set of functions.
+The old function names that you find in the book are *deprecated*. That means the old function names
+still work, but they may not in future versions of the package.
+
+In `igraph`, there are two functions that can do Erdos-Renyi networks. The only difference is
+whether you specify the probability of a tie between two nodes, or how many ties.
+
+```{r}
+g <- sample_gnm(n=12,10)
+g
+graph.density(g)
+g <- sample_gnp(n=12,.15)
+g
+graph.density(g)
+
+```
+
+Run the following a few times to see the random nature of these graphs.
+
+```{r}
+op <- par(mar=c(0,1,3,1),mfrow=c(1,2))
+plot(sample_gnp(n=25,.15),
+                      vertex.color=2,
+                      main="First random graph")
+plot(sample_gnp(n=25,.15),
+                      vertex.color=4,
+                      main="Second random graph")
+par(op)
+```
+
+The shape of the degree distribution is an important characteristic of networks, and helps
+to distinguish among different network models. For large random graphs, you should see a
+Poisson degree distributions.
+
+```{r}
+g <- sample_gnp(n=1000,.005)
+plot(degree.distribution(g),
+     type="b",xlab="Degree",ylab="Proportion",
+     main="Random Graph")
+```
+
+E: What happens as the size of the network gets larger? What happens if the probability
+of a tie increases or decreases?
+
+The following examples demonstrate some of the emergent characteristics of random
+networks. See the chapter for more explanation. However, this code also demonstrates how
+statistical analysis can be conducted with network models, to better understand the
+full implications of these models.
+
+To understand this simple simulation, you should understand the `apply` family of
+iterating functions in R (apply,lapply,sapply).
+
+First, create a function that returns the proportion of nodes in the largest
+connected component of a random graph relative to the total number of nodes. (If
+the entire network is in one component, then the proportion will be 1.)
+
+```{r}
+cmpprp <- function(deg){
+  cmp_prp <- max(clusters(sample_gnp(n=1000,
+                      p=deg/999))$csize)/1000
+  cmp_prp
+}
+```
+
+Now, we create 500 random networks, for each network there will be
+an average degree across the nodes from 1 to 8. Using `map_lgl()` we
+will calculate the largest component proportion for each of these 500
+networks. (Note that this function requires the `purrr` package.)
+
+```{r}
+crnd <- runif(500,1,8)
+cmp_vec <- map_dbl(crnd,cmpprp)                 
+```
+
+Finally, we can plot the component proportion against the
+average degree. This will reveal the relationship
+between the average degree in a random graph, and how connected
+the graph might be.
+
+```{r}
+smoothingSpline <- smooth.spline(crnd,cmp_vec,
+                                 spar=0.25)
+plot(crnd,cmp_vec,col='grey60',
+     xlab="Avg. Degree",
+     ylab="Largest Component Proportion")
+lines(smoothingSpline,lwd=1.5)
+```
+
+The basic point of the above code and figure is that with relatively low average degree, 
+any random network will be completely connected.
+
+Second, random networks can still exhibit 'small world' properties.
+
+The plot in the following code uses the `lattice` graphics package. Make sure to download
+and install it before running.
+
+```{r}
+n_vect <- rep(c(50,100,500,1000,5000),each=50)
+g_diam <- sapply(n_vect,function(x) 
+  diameter(sample_gnp(n=x,p=6/(x-1))))
+```
+
+```{r}
+bwplot(g_diam ~ factor(n_vect),
+       panel=panel.violin,
+       xlab="Network Size",
+       ylab="Diameter")
+
+```
+
+Q: Reflect on how the above characteristics of random networks are connected to the idea
+of '6-Degrees of Separation' and Milgram's small-world study.
+
+## Small-World Model
+
+The first code chunk shows how small-world networks are constructed, and how they look as the
+*rewiring* probability increases. If the rewiring probability is high enough, the network
+will just become a random graph.
+
+It also shows how sometimes the easy things are hard in R. The `expression()` and `paste()` parts
+of the plot command are just so we can include italics in the figure captions.
+
+```{r}
+g1 <- sample_smallworld(dim=1, size=30, nei=2, p=0)
+g2 <- sample_smallworld(dim=1, size=30, nei=2, p=.05)
+g3 <- sample_smallworld(dim=1, size=30, nei=2, p=.20)
+g4 <- sample_smallworld(dim=1, size=30, nei=2, p=1)
+op <- par(mar=c(2,1,3,1),mfrow=c(2,2))
+plot(g1,vertex.label=NA,layout=layout_with_kk,
+     main=expression(paste(italic(p)," = 0")))
+plot(g2,vertex.label=NA,
+     main=expression(paste(italic(p)," = .05")))
+plot(g3,vertex.label=NA,
+     main=expression(paste(italic(p)," = .20")))
+plot(g4,vertex.label=NA,
+     main=expression(paste(italic(p)," = 1")))
+par(op)
+
+```
+
+The pure lattice structure that we start with implies that the diameter of a network will be relatively high,
+because each node is only connected to close neighbors.
+
+```{r}
+g100 <- sample_smallworld(dim=1,size=100,nei=2,p=0)
+g100
+diameter(g100)
+
+```
+
+The following, rather arduous, code shows how the diameter of a network gets rapidly smaller with modest increases in 
+the rewiring probability.
+
+```{r}
+p_vect <- rep(1:30,each=10)
+g_diam <- map_dbl(p_vect,function(x) 
+  diameter(sample_smallworld(dim=1, size=100, 
+                               nei=2, p=x/200)))
+smoothingSpline = smooth.spline(p_vect, g_diam, 
+                                spar=0.35)
+plot(jitter(p_vect,1),g_diam,col='grey60',
+     xlab="Number of Rewired Edges",
+     ylab="Diameter")
+lines(smoothingSpline,lwd=1.5)
+
+```
+
+## Scale-free (Power Law) Network Model
+
+First, we define a rescale function which is used in the following plots.
+
+```{r}
+rescale <- function(node_char,low,high) {
+  min_d <- min(node_char)
+  max_d <- max(node_char)
+  rscl <- ((high - low)*(node_char - min_d))/(max_d - min_d) + low
+  rscl
+}
+```
+
+The new model function name is `sample_pa()` (for preferential attachment).
+
+```{r}
+g <- sample_pa(500,directed=FALSE)
+V(g)$color <- 'lightblue'
+V(g)[degree(g) > 9]$color <- 'red'
+node_size <- rescale(node_char=degree(g),
+                     low=2,high=10)
+plot(g, vertex.label= NA, vertex.size = node_size)
+
+```
+
+The heavy-tailed degree distribution of a scale-free network is easy to see.
+
+```{r}
+degree_distribution(g)
+```
+
+
+```{r, warning=FALSE}
+op <- par(mfrow=c(1,2))
+plot(degree.distribution(g),xlab="Degree",
+     ylab="Proportion")
+plot(degree.distribution(g),log='xy',
+     xlab="Degree",ylab="Proportion")
+par(op)
+
+```
+
+By varying some of the parameters of the model, we can get somewhat more realistic networks.
+
+```{r}
+g <- sample_pa(500,out.dist=c(.25,.5,.25),
+                   directed=FALSE,zero.appeal = 1)
+V(g)$color <- 'lightblue'
+V(g)[degree(g) > 9]$color <- 'red'
+node_size <- rescale(node_char=degree(g),
+                     low=2,high=10)
+plot(g, vertex.label= NA, vertex.size = node_size)
+
+```
+
