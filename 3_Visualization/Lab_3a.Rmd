@@ -1,0 +1,115 @@
+---
+title: "Lab 3a - Basic network plotting"
+author: "Douglas Luke"
+date: "July 27, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This lab corresponds to Chapter 4 - Basic Network Plotting and Layout.
+
+```{r, message=FALSE}
+library(statnet)
+library(UserNetR)
+data(Moreno)
+```
+
+## Basic network plotting
+### Plotting internally vs. to an external file
+
+If a basic plot command is contained in an R-code chunk, then the plot
+will be directed to the notebook or to the plots tab in the RStudio interface.
+
+```{r}
+plot(Moreno,mode="circle",vertex.cex=1.5)
+```
+
+Depending on the size of your computer monitor, size of RStudio windows, etc., the network graphic may not look as good as it could. For
+any final version graphic, it is a good idea to print the graphic to an external file. R handles this by printing to a plot 'device.'
+
+The following code will create a new file called `test1.pdf` containing the Moreno network plot, and saved in the current working directory.
+
+
+```{r}
+pdf("test1.pdf",width=11,height=8.5)
+plot(Moreno,mode="circle",vertex.cex=1.5,main="Does This Look Good?")
+```
+
+The built-in cairographics plot device produces high quality PDF, SVG, and postscript graphics files. 
+
+E: Learn more about plot devices by seeing the help for `Devices`, `cairo_pdf` and `dev.print`.
+
+### Different layout options
+
+Two things to note here. First, a layout option can be specified in the call to the plot function.
+Second, note how we are using the `par()` function to prespecify some overall graphics properties, in
+this case we are reducing the size of the figure margins (`mar`) and setting up a graphics
+window that will accept two plots, arranged in 1 row and 2 columns (`mfrow=c(1,2)`).
+
+```{r}
+op <- par(mar = rep(0, 4),mfrow=c(1,2))
+plot(Moreno,mode="circle",vertex.cex=1.5)
+plot(Moreno,mode="fruchtermanreingold",vertex.cex=1.5)
+par(op)
+```
+
+The `par(op)` command resets the graphics options to what we had before. A little hard to follow the logic, but the above code
+structure should always be used.
+
+Q: What is the default layout option, if one is not specified?
+
+E: How could you arrange the plots vertically, instead of horizontally?
+
+### Exploring layouts
+
+Review material in book about meaningful and non-meaningful information in network graphics.
+
+```{r}
+op <- par(mar = c(0,0,4,0),mfrow=c(1,2))
+gplot(Moreno,gmode="graph",mode="random",
+      vertex.cex=1.5,main="Random layout")
+gplot(Moreno,gmode="graph",mode="fruchtermanreingold",
+      vertex.cex=1.5,main="Fruchterman-Reingold")
+par(op)
+```
+
+Q: Why is the second option above more informative?
+
+Q: Why do you get different layouts each time you run the code? Is the 2nd option always better?
+
+Looking at some more layout options. Notice that `gplot` has more layout options than `plot`.
+
+```{r}
+data(Bali)
+op <- par(mar=c(0,0,4,0),mfrow=c(2,3))
+gplot(Bali,gmode="graph",edge.col="grey75",
+      vertex.cex=1.5,mode='circle',main="circle")
+gplot(Bali,gmode="graph",edge.col="grey75",
+      vertex.cex=1.5,mode='eigen',main="eigen")
+gplot(Bali,gmode="graph",edge.col="grey75",
+      vertex.cex=1.5,mode='random',main="random")
+gplot(Bali,gmode="graph",edge.col="grey75",
+      vertex.cex=1.5,mode='spring',main="spring")
+gplot(Bali,gmode="graph",edge.col="grey75",
+      vertex.cex=1.5,mode='fruchtermanreingold',
+      main='fruchtermanreingold')
+gplot(Bali,gmode="graph",edge.col="grey75",
+      vertex.cex=1.5,mode='kamadakawai',
+      main='kamadakawai')
+par(op)
+```
+
+E: Try out other layout functions, after looking at `?gplot.layout()`.

@@ -1,0 +1,366 @@
+---
+title: "Lab 2a - Network data management with statnet"
+author: "Douglas Luke"
+date: "July 10, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+
+## Introduction
+
+These labs are meant to be exploratory exercises (*i.e.,* laboratories), that roughly follow
+the material in my Springer book, *A User's Guide to Network Analysis.* In general, these
+labs will have minimal exposition, but focus on the logic of the code and output, and
+suggest ways to explore the material in greater depth.
+
+This lab corresponds to Chapter 3 - Network Data Management.
+
+```{r, message=FALSE}
+library(statnet)
+library(UserNetR)
+```
+
+## Creating network data objects
+### From matrices
+Typically, network objects will be created from matrices, or from edgelists.
+Notice how matrices can be subsetted using indexing.
+
+```{r}
+netmat1 <- rbind(c(0,1,1,0,0),
+                 c(0,0,1,1,0),
+                 c(0,1,0,0,0),
+                 c(0,0,0,0,0),
+                 c(0,0,1,0,0))
+class(netmat1)
+netmat1[3,]
+netmat1[,2]
+netmat1[3,2]
+netmat1[,]
+```
+
+Q: Can you tell from this matrix whether we are going to have a directed, or 
+non-directed network?
+
+To create a network from a matrix, use the `network()` function. Note that if
+the matrix has row and column names, they will be used to name the nodes in
+the resulting network.
+
+```{r}
+rownames(netmat1) <- c("A","B","C","D","E")
+colnames(netmat1) <- c("A","B","C","D","E")
+net1 <- network(netmat1,matrix.type="adjacency")
+class(net1)
+summary(net1)
+```
+
+Q: What other types of matrices can `network()` handle?
+
+E: Explore what happens if you do not set the row/column names ahead of time.
+
+```{r}
+gplot(net1,vertex.col=2,displaylabels=TRUE)
+```
+
+E: What happens when you use `plot` instead of `gplot`? Look at the help for
+these two commands to explore the differences. Start exploring ways to improve
+the appearance of these plots.
+
+### From edge-lists
+
+This still works from a matrix, but the matrix here is in the form of an
+edge-list.
+
+```{r}
+netmat2 <- rbind(c(1,2),
+                 c(1,3),
+                 c(2,3),
+                 c(2,4),
+                 c(3,2),
+                 c(5,3))
+net2 <- network(netmat2,matrix.type="edgelist")
+network.vertex.names(net2) <- c("A","B","C","D","E")
+summary(net2)
+```
+
+E: Figure out a way to create a network from an edgelist, where the names
+of the nodes are included in the matrix itself. Hint: the edgelist matrix
+can be made of strings, not just numbers.
+
+### Coercion functions
+
+The power of data management in R is driven partly by the ease of 'coercing' data
+in one form into another form. Sometimes called data transformation.
+
+
+```{r}
+as.sociomatrix(net1)
+class(as.sociomatrix(net1))
+class(net1)
+as.edgelist(net1)
+```
+
+Q: Is there an equivalent function for edgelists?
+
+A more general coercion function is \texttt{as.matrix()}. 
+It can be used to produce a sociomatrix or an edgelist matrix.
+
+```{r}
+all(as.matrix(net1) == as.sociomatrix(net1))
+as.matrix(net1,matrix.type = "edgelist")
+```
+
+There is a lot of subtle stuff that goes on under the hood with data objects. (Run
+the following code one line at a time.)
+
+```{r}
+class(net1)
+net1
+net1[,]
+net1[3,]
+net1[,2]
+net1[3,2]
+```
+
+E: This looks a lot like how we were earlier able to extract parts of a matrix.
+How does R know how to do this with a network object? Hint: Use the `class()` function
+to see what is being returned.
+
+## Managing node and tie attributes
+
+### Node attributes
+
+One of the reasons we use network objects, and not just raw matrices (sociomatrices or
+edgelists), is that network objects can also store information about the nodes and/or 
+ties in the object itself. This facilitates network analysis and visualization.
+
+```{r}
+set.vertex.attribute(net1, "gender", c("F","F","M","F","M"))
+net1 %v% "alldeg" <- degree(net1)
+list.vertex.attributes(net1)
+summary(net1)
+net1 %v% "vertex.names" <- c("Susan","Alina","Doug","Helen","Andrew")
+net1 %v% "vertex.names"
+```
+
+Make sure you understand that the first two lines in the code above demonstrate
+two equivalent ways to set node attributes. This syntax can also be used to
+view the node attributes (not just to set them).
+
+```{r}
+net1 %v% "alldeg"
+```
+
+*Important point that is not emphasized in the book!*
+
+When setting the node attributes, especially when bringing in attribute data
+from an external source such as a data.frame, you must make sure that the attribute
+data use the same order of nodes as the network object. 
+
+So, when creating the network object, think carefully about what the right sort order
+is.
+
+Note that for a `statnet` network object, the network will have a `vertex.names`
+node attribute that can be examined to see the node order.
+
+```{r}
+net1 %v% "vertex.names"
+```
+
+E: These examples are easy to follow for a small, artificial network. Take some time
+to use these procedures on one of the larger networks included in `UserNetR`. For example, the
+following code shows how to look only at the first five node names (to check node order) from
+the `DHHS` network.
+
+```{r}
+data(DHHS)
+(DHHS %v% "vertex.names")[1:5]
+```
+
+Q: What happens if you leave out the parentheses above? What happens if you drop the brackets? Any ideas what is happening here?
+
+### Tie attributes
+
+Less commonly needed, but still important to understand. Harder to work with, because
+it's harder to see (and manipulate) the underlying tie order.
+
+Here we can see how to create a valued network from a sociomatrix.
+
+```{r}
+netval1 <- rbind(c(0,2,3,0,0),
+                 c(0,0,3,1,0),
+                 c(0,1,0,0,0),
+                 c(0,0,0,0,0),
+                 c(0,0,2,0,0))
+netval1 <- network(netval1,matrix.type="adjacency",
+                   ignore.eval=FALSE,names.eval="like")
+network.vertex.names(netval1) <- c("A","B","C","D","E")
+list.edge.attributes(netval1)
+get.edge.attribute(netval1, "like")
+netval1 %e% "like"
+```
+
+E: Figure out how to plot the previous network using the tie strength attribute (`like`)
+to adjust the thickness of the lines.
+
+```{r}
+thick <- ((netval1 %e% "like")*4)-3
+plot(netval1,vertex.col=2,displaylabels=TRUE,edge.lwd=thick)
+```
+
+## Importing network data
+
+*Possibly do class exercise.*
+
+```{r}
+netmat3 <- rbind(c("A","B"),
+                 c("A","C"),
+                 c("B","C"),
+                 c("B","D"),
+                 c("C","B"),
+                 c("E","C"))
+net.df <- data.frame(netmat3)
+net.df
+write.csv(net.df, file = "MyData.csv",
+          row.names = FALSE)
+net.edge <- read.csv(file="MyData.csv")
+net_import <- network(net.edge,
+                      matrix.type="edgelist")
+summary(net_import)
+gden(net_import)
+```
+
+## Common data management tasks
+
+### Filtering on node (or tie) attributes
+
+```{r}
+net1 %v% "gender"
+n1F <- get.inducedSubgraph(net1,
+            which(net1 %v% "gender" == "F"))
+n1F[,]
+```
+
+E: Look at the help file for `get.inducedSubgraph` and `which` to figure out
+why the above code works.
+
+### Removing isolates
+
+A very common task is to filter out isolates (nodes with degree=0; no ties).
+Note that this is just a special type of filtering. So, can use the same
+approach as above.
+
+Here we use the ICTS dataset.
+
+```{r}
+data(ICTS_G10)
+summary(ICTS_G10,print.adj = FALSE)
+table(degree(ICTS_G10,gmode="graph"))
+degree(ICTS_G10,gmode="graph")
+plot(ICTS_G10)
+```
+
+Q: What happens above if you drop out the `gmode` option?
+
+```{r}
+ICTS2 <- get.inducedSubgraph(ICTS_G10,
+            which(degree(ICTS_G10) > 0))
+table(degree(ICTS2,gmode="graph"))
+network.size(ICTS_G10)
+network.size(ICTS2)
+```
+
+Q: Why does the following code not work? 
+
+```{r, eval=FALSE}
+ICTS2 <- get.inducedSubgraph(ICTS_G10,
+            which(degree(ICTS_G10 > 0)))
+
+```
+
+In the book I highlight the use of the `isolates()` function. Now I think the above
+approach is much easier.
+
+### More detailed example
+
+Look at the DHHS network.
+
+```{r}
+data(DHHS)
+d <- DHHS
+gden(d)
+```
+The following code is taken directly from my book.
+
+```{r}
+d.val <- as.sociomatrix(d,attrname="collab")
+d.val[d.val < 3] <- 0
+d.filt <- as.network(d.val, directed=FALSE, 
+                    matrix.type="a",ignore.eval=FALSE,
+                    names.eval="collab")
+```
+
+This approach to filtering leaves the same number of nodes, but density is now much lower.
+
+```{r}
+network.size(d)
+gden(d)
+network.size(d.filt)
+gden(d.filt)
+```
+
+
+Here is an alternative way to filter a graph based on tie values. Note that this code
+is much simpler.
+
+```{r}
+table(d %e%"collab")
+d.filt2 <- get.inducedSubgraph(d,
+                          eid=which(d %e% "collab" > 2))
+table(d.filt2 %e%"collab")
+network.size(d.filt2)
+gden(d.filt2)
+```
+
+*However, this approach does not filter the network in exactly the same way!* The new filtered
+network has six fewer nodes than the first approach (and thus, a higher density). Why is this?
+The key is in the following line from the help file for `get.inducedSubgraph`: 
+
+"When eid is specified, the v and alters argument will be ignored and the subgraph 
+induced by the specified edges *and their incident vertices* will be returned."
+
+So, the first method (described in my book), filters by dropping edges but retaining
+all nodes. The second approach filters by first selecting the edges, and then including only
+the nodes incident to those edges. 
+
+## Symmetrizing a network
+
+This means turning a directed network into a non-directed network.
+
+```{r}
+net1mat <- symmetrize(net1,rule="weak")
+net1mat
+net1symm <- network(net1mat,matrix.type="adjacency")
+network.vertex.names(net1symm) <- c("A","B","C","D","E")
+summary(net1symm)
+
+```
+
+Q: What do the various rule options mean for the `symmetrize()` function,
+and when might you use each of them?
+
+```{r}
+gplot(net1,vertex.col=2,displaylabels=TRUE)
+```
+
+```{r}
+gplot(net1symm,vertex.col=2,displaylabels=TRUE)
+```
+
+E: Is the above plot what you expected to see? Why are arrows plotted? How could you fix this?

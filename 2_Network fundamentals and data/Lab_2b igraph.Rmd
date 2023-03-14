@@ -1,0 +1,151 @@
+---
+title: "CSV Import Example"
+author: "Douglas Luke"
+date: "July 16, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Overview
+
+This is a short lab demonstrating one approach to building a network object
+by importing data contained in CSV files. Make sure that your working directory
+is set to the same place that the example CSV files are stored. 
+
+For this lab we are using `igraph`.
+
+```{r, message=FALSE}
+library(igraph)
+```
+
+
+## Import data
+
+CSV files are easy to work with in R, use `read.csv()` to import the data. One wrinkle
+is that by default this function will turn character variables into factors. That can
+cause problems for creating the network data, so here we use the `as.is` option to
+keep character variables as character.
+
+
+```{r}
+net.edge <- read.csv(file="R_Help_Edgelist2.csv")
+net.attr <- read.csv(file="R_Help_Attributes.csv")
+```
+
+Make sure to examine the resulting objects, note their class and structure.
+
+## Create basic network object
+
+This step is easy, assuming the edgelist data are clean.
+
+```{r}
+expert <- graph.edgelist(as.matrix(net.edge))
+summary(expert)
+graph.density(expert)
+```
+
+Q: Think about the various ways that edgelist data stored in spreadsheets could be 'dirty.'
+
+Can you tell from the above what the node order is? Check out the names of the nodes.
+
+```{r}
+V(expert)$name
+```
+
+How does that correspond to the node order implied by the CSV edgelist data?
+
+You might want to plot the network and check the raw edgelist data to make sure everything
+looks OK.
+
+```{r}
+plot(expert,vertex.color="burlywood3",
+     edge.arrow.size=.4,vertex.label.cex=.7)
+```
+
+E: Google 'color names in R' to quickly see how you might pick a built-in color name.
+
+So, essentially, edgelist data can be imported and turned into network data in two
+lines of code.
+
+## Add attribute data
+
+But, to make the network object more interesting and useful, we should add our
+node attribute data.
+
+For the following to work, you need to know how the nodes are ordered in the network.
+As we saw, they are ordered by the original node label order in the CSV edgelist file.
+
+Unfortunately, the attribute CSV file is not in the same order! 
+
+To see this explicitly, here is the order of node names: 
+
+```{r}
+V(expert)$name
+```
+And then the order of the
+names in the attribute file:
+
+```{r}
+net.attr$Name
+```
+
+They do not match, and they need to match exactly.
+
+So, to bring in the attribute data we will want these data to be in exactly the same
+order as the nodes. Many ways to do this, but the
+following is easy to understand. Actually, I take that back--the following is actually
+pretty tricky to understand. (Look up help for `match()` and remember how we use
+square brackets to index a data.frame.)
+
+
+```{r}
+net.attr.rearrange <- net.attr[match(V(expert)$name,net.attr$Name),]
+net.attr.rearrange$Name
+```
+Now, just to make sure, here is the node order, followed by the rearranged attribute dataframe:
+
+```{r}
+V(expert)$name
+net.attr.rearrange
+```
+
+So now we can proceed to import the attribute data into the igraph network object.
+
+Let's start with expertise.
+
+```{r}
+V(expert)$expertise <- net.attr.rearrange$Expertise
+V(expert)$expertise
+table(V(expert)$expertise)
+```
+
+Once node attribute data is available, it can be used in the network analysis. Here,
+we plot the network and set the size of the nodes based on the reported expertise level.
+
+```{r}
+plot(expert,vertex.size=V(expert)$expertise*6,
+     edge.arrow.size=.4,vertex.label.cex=.7)
+```
+
+Now, let's add gender.
+
+```{r}
+V(expert)$gender <- net.attr.rearrange$Sex
+V(expert)$gender
+table(V(expert)$gender)
+```
+
+```{r}
+colrs <- c("tomato","gold")
+V(expert)$color <- colrs[as.factor(V(expert)$gender)]
+plot(expert, edge.arrow.size=.4,vertex.label.cex=.7)
+
+```
+
+Voila!

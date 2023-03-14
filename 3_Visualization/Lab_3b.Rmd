@@ -1,0 +1,238 @@
+---
+title: "Lab 3b - Effective network graphic design"
+author: "Douglas Luke"
+date: "July 27, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Introduction
+
+This lab corresponds to Chapter 5 - Effective Network Graphic Design.
+
+Note the new package that we're using here. Make sure to install the RColorBrewer package
+before running the following code.
+
+```{r, message=FALSE}
+library(statnet)
+library(UserNetR)
+library(RColorBrewer)
+```
+
+## Nodes
+### Node color
+
+Node color can be used to make a network graphic more attractive. More usefully, we can set nodes
+to a particular color based on a (usually categorical) node attribute.
+
+R refers to colors in many different ways. 
+
+Most simply, you can specify a color by its built-in name.
+
+```{r}
+data(Bali)
+gplot(Bali,vertex.col="slateblue2",gmode="graph")
+```
+
+E: Use `colors()` to see the various color names. Try some of them out.
+
+More precise color control can be obtained by using its RGB (red-green-blue) code or its
+underlying hexadecimal code.
+
+```{r}
+col2rgb('slateblue2')
+gplot(Bali,vertex.col=rgb(122,103,238,
+                maxColorValue=255),gmode="graph")
+gplot(Bali,vertex.col="#7A67EE",gmode="graph")
+```
+
+E: Try picking a color at paletton.com and using it in the network graphic.
+
+An advanced color feature is to use the alpha channel to plot nodes with semi-transparent colors.
+
+```{r}
+ndum <- rgraph(300,tprob=0.025,mode="graph")
+op <- par(mar = c(0,0,2,0),mfrow=c(1,2))
+gplot(ndum,gmode="graph",vertex.cex=2,
+      vertex.col=rgb(0,0,139,maxColorValue=255),
+      edge.col="grey80",edge.lwd=0.5,
+      main="Fully opaque")
+gplot(ndum,gmode="graph",vertex.cex=2,
+      vertex.col=rgb(0,0,139,alpha=80,
+                     maxColorValue=255),
+      edge.col="grey80",edge.lwd=0.5,
+      main="Partly transparent")
+par(op)
+```
+
+Q: What network is being plotted above? 
+
+The power of node color is unlocked when we set different nodes to different colors. Typically, we will communicate information
+about a node characteristic (e.g., gender) by setting nodes to different colors based on that characteristic.
+
+(Note the simpler version of the code below compare to in the book.)
+
+```{r}
+plot(Bali,usearrows=FALSE,vertex.cex=1.5,label="role",
+    displaylabels=T,vertex.col="role")
+```
+
+Q: How does R know which colors to use here? Hint: Try out the `palette()` function.
+
+The color palette system in R allows you to pick sets of colors that will work well together.
+
+```{r}
+my_pal <- brewer.pal(5,"Dark2")
+my_pal
+rolelab <- get.vertex.attribute(Bali,"role")
+rolecat <- as.factor(get.vertex.attribute(Bali,"role"))
+plot(Bali,vertex.cex=2,label=rolelab,
+    displaylabels=T,vertex.col=my_pal[rolecat])
+
+```
+
+E: Explore the palettes that are defined in RColorBrewer using `display.brewer.all()`. Pick a different palette and use it to
+plot the network above.
+
+E: Create your own palette using an online tool such as paletton.com or coolors.co, and use it to plot the Bali network.
+
+### Node size
+
+Just like color, node size can be set for aesthetics, or to communicate some information about the nodes.
+
+If the following graph doesn't look right, just run each plot command one at a time.
+
+```{r}
+op <- par(mar = c(0,0,2,0),mfrow=c(3,1))
+plot(Bali,vertex.cex=0.5,main="Too small")
+plot(Bali,vertex.cex=2,main="Just right")
+plot(Bali,vertex.cex=6,main="Too large")
+par(op)
+```
+
+More usefully, we can set size based on an interesting characteristic of the node, such as centrality (to be covered in more
+detail in a later lecture).
+
+```{r}
+deg <- degree(Bali,gmode="graph")
+deg
+cls <- closeness(Bali,gmode="graph")
+cls
+bet <- betweenness(Bali,gmode="graph")
+bet
+```
+
+Use these centrality measures to set the size of the nodes.
+
+```{r}
+op <- par(mar = c(0,0,2,1),mfrow=c(1,2))
+plot(Bali,usearrows=T,vertex.cex=deg,main="Raw")
+plot(Bali,usearrows=FALSE,vertex.cex=log(deg),
+     main="Adjusted")
+par(op)
+```
+
+E: Use the other centrality measures in the network plot.
+
+Rescaling node sizes is often done by trial and error (see book for more details). However, a simple function proves useful here.
+
+```{r}
+rescale <- function(nchar,low,high) {
+  min_d <- min(nchar)
+  max_d <- max(nchar)
+  rscl <- ((high-low)*(nchar-min_d))/(max_d-min_d)+low
+  rscl
+}
+```
+
+The above code demonstrates one of the great strengths of R. Since R is actually a statistical programming language, we can
+extend R by writing new functions. Essentially, we have just added a new command to R, called `rescale()`. We can use it
+to make it easier to rescale a numeric vector of node characteristics, to facilitate plotting.
+
+```{r}
+plot(Bali,vertex.cex=rescale(deg,1,6),
+     main="Adjusted node sizes with rescale function.")
+
+```
+
+E: Adjust the rescaling parameters. Also redo the network graphic using betweenness and closeness centrality, while also using the rescale function.
+
+### Node labels
+
+Node labels can be informative, especially for networks with smaller numbers of nodes, and with nodes that have some meaning for the audience.
+
+```{r}
+get.vertex.attribute(Bali,"vertex.names")
+op <- par(mar = c(0,0,0,0))
+plot(Bali,displaylabels=TRUE,label.cex=0.8,
+     pad=0.4,label.col="darkblue")
+par(op)
+
+```
+
+Can use any other character field to label the nodes, if it would be useful.
+
+```{r}
+plot(Bali,usearrows=FALSE,label="role",
+    displaylabels=T,label.col="darkblue")
+```
+
+E: How might you selectively label only some of the nodes? For example, how might you use the network member name for Bali,
+but only if degree is > 9? (Hint: Use `ifelse()` to create a new node attribute.)
+
+```{r, eval=FALSE, echo=FALSE}
+ndeg <- degree(Bali, gmode="graph")
+Bali %v% "newlab" <- ifelse(ndeg > 9,(Bali %v% "vertex.names"),"")
+plot(Bali,usearrows=FALSE,label="newlab",
+    displaylabels=T,label.col="darkblue")
+
+```
+
+
+## Edges
+
+### Edge width
+
+If you have a valued network, then it is sometimes useful to set the edge width
+to correspond to tie strength.
+
+In the Bali network, `IC` is a tie attribute that measures the extent of communication
+between two network members.
+
+```{r}
+op <- par(mar = c(0,0,0,0))
+IClevel <- Bali %e% "IC"
+plot(Bali,vertex.cex=1.5,
+    edge.lwd=1.5*IClevel)
+par(op)
+
+```
+
+### Edge color
+
+Just as nodes can have different colors, so can edges.
+
+The following is not a realistic example, but demonstrates random
+selection of colors for each tie.
+
+```{r}
+n_edge <- network.edgecount(Bali)
+edge_cat <- sample(1:3,n_edge,replace=T)
+linecol_pal <- c("blue","red","green")
+plot(Bali,vertex.cex=1.5,vertex.col="grey25",
+     edge.col=linecol_pal[edge_cat],edge.lwd=2)
+```
+
+Q: How might you use one of the named R colors to help de-emphasize network ties in
+a network graphic?
+
+E: Using what you have learned, take the Simpsons network and create the best and most 
+informative graphic that you can. Use the `group` node attribute, and size nodes based
+on a reasonable measure of centrality. Finally, choose a layout that works best for 
+the graphic.

@@ -1,0 +1,130 @@
+---
+title: "Lab 1 - The Five-Number Summary"
+author: "Douglas Luke"
+date: "July 10, 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+urlcolor: blue
+---
+
+## Introduction
+
+
+This is the first SNA Lab for the summer workshop. (See *Preparing Your Computer for SNA*
+for instructions
+on how to install R, RStudio, and the required datasets.)
+
+This Lab has two goals:
+
+1. Demonstrate the *Notebook* functionality built-in to RStudio.
+2. Demonstrate some very basic ways to examine a network using the
+`statnet` package in R.
+
+First, load the required network and data packages.
+
+```{r, message=FALSE}
+library(statnet)
+library(UserNetR)
+data(Moreno)
+```
+
+## Simple visualization
+
+```{r}
+plot(Moreno,
+     vertex.col = (Moreno %v% "gender" + 2),
+     vertex.cex=3)
+```
+
+E: Try changing the number for 'vertex.cex' and see what happens when you rerun the code.
+
+## Basic Description
+
+When you have network data, there are usually some basic 
+characteristics of the network that you will interested in. 
+
+### Network summary for a statnet object
+
+Most things that R can manipulate (plot, analyze, transform, etc.)
+are stored as some type of R object. These objects can be
+examined in a number of ways. You can usually start by
+calling the *summary()* function on the object that you're 
+interested in. Here, we can look at the basic information
+about the Moreno network. 
+
+```{r}
+summary(Moreno,print.adj=FALSE)
+```
+
+E: Try removing the 'print.adj = F' part of the command and see if you
+can figure out what is happening.
+
+### Network size
+
+The most fundamental piece of information about a network is its
+size. This is the number of nodes (vertices) that are in the network.
+(Typically, you will already know the size of the network before you
+even look at the data.)
+
+```{r}
+network.size(Moreno)
+```
+
+Notice that this information was also included in the network summary
+above.
+
+### Network density
+
+Possibly the most useful basic descriptive of a network is its density,
+which is the proportion of observed ties to the total number of possible
+ties. It is a measure of the *interconnectedness* of the network.
+
+```{r}
+gden(Moreno)
+```
+
+### Components
+
+If you examine the previous plot, you can see that the network
+has two separate groups. Most of the members are connected to each
+other, but two green dots are connected to each other but not to the larger group.
+These are called components, and you can see how many are in your
+network with the following code.
+
+```{r, message=FALSE,warning=FALSE}
+components(Moreno)
+```
+
+### Diameter
+
+A social network is considered compact if it doesn't take
+many hops or connections to get from one node to the furthest
+away node. The diameter of the network is the distance between the 
+two most distant nodes. The following code is a little complicated,
+it will be explained later. Note also that this is easier to do
+in igraph.
+
+```{r, warning=FALSE,message=FALSE,error=FALSE}
+lgc <- component.largest(Moreno,result="graph")
+gd <- geodist(lgc)
+max(gd$gdist)
+```
+
+### Clustering coefficient
+
+True social networks (e.g., made up by people) often exhibit
+a tendency towards closure or clustering. One way to assess
+this is by measuring the network's transitivity.
+
+```{r}
+gtrans(Moreno,mode="graph")
+```
+
+In summary, R allows you to get a quick sense of the important
+characteristics of any network that is stored as an R network data
+object.
